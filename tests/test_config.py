@@ -14,7 +14,8 @@ def test_shared_defaults_and_environment():
     assert isinstance(settings, Settings)
     assert settings.current_env.lower() == "stage"
     assert settings.base_url == "https://console.stage.redhat.com"
-    assert settings.proxy == "http://squid.corp.redhat.com:3128"
+    assert settings.http.proxy == "http://squid.corp.redhat.com:3128"
+    assert settings.get("proxy") is None
     assert settings.vault.mount_point == "insights"
 
 
@@ -24,6 +25,26 @@ def test_consumer_default_overrides_shared_environment(config_file):
     assert settings.base_url == "https://consumer.invalid"
     assert settings.vault.verify is False
     assert settings.vault.mount_point == "insights"
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        ("stage", "https://cert.console.stage.redhat.com"),
+        ("prod", "https://cert.console.redhat.com"),
+    ],
+)
+def test_certificate_base_url_defaults(environment, expected):
+    assert load_config(environment=environment).cert_base_url == expected
+
+
+def test_consumer_certificate_base_url_override(config_file, monkeypatch):
+    path = config_file("default: {cert_base_url: 'https://client-cert.invalid'}")
+    settings = load_config(path, environment="stage")
+    assert settings.cert_base_url == "https://client-cert.invalid"
+    assert settings.base_url == "https://console.stage.redhat.com"
+    monkeypatch.setenv("DYNACONF_CERT_BASE_URL", "https://override-cert.invalid")
+    assert load_config(path, environment="stage").cert_base_url == "https://override-cert.invalid"
 
 
 def test_environment_argument_and_nested_override(monkeypatch):

@@ -17,16 +17,16 @@ uv build
 
 The checkout is installed in editable mode. Pre-commit runs Ruff, strict mypy,
 and basic file checks; tests are offline and need no service credentials.
-Use `uv run --all-extras pytest tests/test_config.py -q` to run one module.
+Use `uv run --all-extras pytest tests/test_http.py -q` to run one module.
 
 To use the checkout in another uv project:
 
 ```bash
-uv add --dev --editable '/path/to/iqe-library[config,vault]'
+uv add --dev --editable '/path/to/iqe-library[http,config]'
 ```
 
 The base package has no runtime dependencies. Select only the extras you need:
-`config`, `vault`, and `kerberos`.
+`http`, `config`, `vault`, and `kerberos`.
 
 ## Configuration
 
@@ -37,8 +37,16 @@ file. Consumer values override shared defaults; `.local.yaml` companions and
 ```yaml
 # consumer.yaml
 default:
-  base_url: https://service.example.com
-  username: '@jinja {{ env.DEMO_USERNAME }}'
+  default_user: viewer
+  http:
+    default_auth_type: basic
+    timeout: 10
+  users:
+    viewer:
+      auth:
+        basic:
+          username: demo
+          password: '@jinja {{ env.DEMO_PASSWORD }}'
 ```
 
 ```python
@@ -49,9 +57,48 @@ print(settings.base_url)
 ```
 
 The environment defaults to `ENV_FOR_DYNACONF`, then `stage`.
-For example, `DYNACONF_VAULT__TIMEOUT=20` overrides a nested setting.
+For example, `DYNACONF_HTTP__TIMEOUT=20` overrides a nested setting.
 Jinja templates and `!from_vault {path: users/demo, key: password}` references
 resolve only when accessed; Vault references also require the `vault` extra.
+
+## HTTP sessions and authentication
+
+Requires `http`. Sessions are Requests-compatible, default to system TLS trust
+and a 30-second timeout, and should be closed with a context manager.
+
+```python
+from iqe_library.http import create_session_from_config
+
+with create_session_from_config(settings, user="viewer", auth_type="basic") as session:
+    response = session.get(f"{settings.base_url}/api/inventory/v1/hosts")
+    response.raise_for_status()
+```
+
+Config-backed sessions support `basic`, `jwt`, `cert`, `identity`, and `none`.
+They also accept plain mappings without the `config` extra. For direct OAuth use:
+
+```python
+import os
+
+from iqe_library.auth import OIDCAuth, TokenEndpoint
+from iqe_library.http import create_session
+
+endpoint = TokenEndpoint(token_url=os.environ["TOKEN_URL"])
+auth = OIDCAuth.from_refresh_token(os.environ["OFFLINE_TOKEN"], endpoint)
+with create_session(auth=auth) as session:
+    response = session.get("https://service.example.com/api/items")
+```
+
+OAuth tokens are acquired lazily and renewed automatically. Service accounts can
+use `OIDCAuth.from_client_credentials(secret, endpoint)` with an explicit client ID.
+`IdentityAuth(identity, entitlements)` provides `x-rh-identity` authentication.
+For client TLS, pass `CertificateAuth.from_files(cert_path, key_path)` or
+`CertificateAuth.from_pem(cert_pem, key_pem)` as `auth`; session close removes only
+library-owned PEM files. Use `settings.cert_base_url` for Stage/prod certificate APIs.
+
+**Logging:** API summaries include full URLs and textual request bodies, which may
+contain secrets. Disable them with `session.hooks["response"].clear()` or replace
+the hook before sending sensitive data. OAuth exchanges are not logged.
 
 ## Vault secrets
 

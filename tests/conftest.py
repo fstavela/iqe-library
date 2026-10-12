@@ -3,6 +3,7 @@
 import os
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,6 +30,29 @@ def clean_network_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "CURL_CA_BUNDLE",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def http_transport(monkeypatch):
+    """Stub only adapter I/O, retaining Requests preparation, redirects and hooks."""
+    import requests
+
+    transport = SimpleNamespace(calls=[], replies=[], responses=[])
+
+    def send(adapter, request, **kwargs):
+        transport.calls.append((request, kwargs))
+        if transport.replies:
+            response = transport.replies.pop(0)
+        else:
+            response = requests.Response()
+            response.status_code = 200
+            response._content = b"response-secret"
+        response.request, response.url = request, request.url
+        transport.responses.append(response)
+        return response
+
+    monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", send)
+    return transport
 
 
 @pytest.fixture

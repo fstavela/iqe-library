@@ -57,6 +57,41 @@ sys.addaudithook(audit)
     return run
 
 
+@pytest.mark.parametrize("first", ["auth", "http"])
+def test_http_auth_are_independent_and_lazy(isolated, first):
+    isolated(
+        f"""
+        import importlib
+        importlib.import_module('iqe_library.{first}')
+        from pathlib import Path
+        import requests
+        from requests.auth import HTTPBasicAuth
+        from iqe_library.auth import CertificateAuth, IdentityAuth, NoAuth, OIDCAuth, TokenEndpoint, certificate_files
+        from iqe_library.http import create_session, create_session_from_config
+
+        def no_requests(*args, **kwargs):
+            raise AssertionError('Requests during construction')
+        requests.Session.send = no_requests
+        endpoint = TokenEndpoint(token_url='https://sso.invalid/token')
+        auths = [None, NoAuth(), HTTPBasicAuth('u', 'p'), IdentityAuth({{}}),
+                 OIDCAuth.from_refresh_token('offline', endpoint),
+                 OIDCAuth.from_client_credentials('secret', endpoint),
+                 CertificateAuth.from_pem('cert', 'key')]
+        with certificate_files('cert', 'key') as paths:
+            auths.append(CertificateAuth.from_files(*paths))
+            for auth in auths:
+                with create_session(auth=auth) as session:
+                    assert isinstance(session, requests.Session)
+                session.close()
+            assert all(Path(path).is_file() for path in paths)
+        assert all(not Path(path).exists() for path in paths)
+        with create_session_from_config({{'http': {{'default_auth_type': 'none'}}}}) as session:
+            assert isinstance(session.auth, NoAuth)
+        """,
+        blocked=("dynaconf", "hvac", "pytest", "iqe", "iqe_library.config", "iqe_library.vault"),
+    )
+
+
 @pytest.mark.parametrize(
     "module,blocked,construction",
     [

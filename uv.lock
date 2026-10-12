@@ -341,6 +341,11 @@ config = [
     { name = "truststore" },
     { name = "urllib3" },
 ]
+http = [
+    { name = "requests" },
+    { name = "truststore" },
+    { name = "urllib3" },
+]
 kerberos = [
     { name = "requests-gssapi" },
 ]
@@ -369,14 +374,17 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'config'", specifier = ">=3" },
     { name = "pyyaml", marker = "extra == 'config'", specifier = ">=6" },
     { name = "requests", marker = "extra == 'config'", specifier = ">=2.32.2" },
+    { name = "requests", marker = "extra == 'http'", specifier = ">=2.32.2" },
     { name = "requests", marker = "extra == 'vault'", specifier = ">=2.32.2" },
     { name = "requests-gssapi", marker = "extra == 'kerberos'" },
     { name = "truststore", marker = "extra == 'config'", specifier = ">=0.10" },
+    { name = "truststore", marker = "extra == 'http'", specifier = ">=0.10" },
     { name = "truststore", marker = "extra == 'vault'", specifier = ">=0.10" },
     { name = "urllib3", marker = "extra == 'config'", specifier = ">=1.26.5" },
+    { name = "urllib3", marker = "extra == 'http'", specifier = ">=1.26.5" },
     { name = "urllib3", marker = "extra == 'vault'", specifier = ">=1.26.5" },
 ]
-provides-extras = ["config", "vault", "kerberos"]
+provides-extras = ["http", "config", "vault", "kerberos"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -1,5 +1,10 @@
 default:
-  proxy: null
+  http:
+    default_auth_type: basic
+    proxy: null
+    verify: true
+    timeout: 30
+    trust_env: true
   vault:
     url: https://vault.devshift.net
     mount_point: insights
@@ -13,6 +18,12 @@ default:
     timeout: 60
 stage:
   base_url: https://console.stage.redhat.com
-  proxy: http://squid.corp.redhat.com:3128
+  cert_base_url: https://cert.console.stage.redhat.com
+  http:
+    proxy: http://squid.corp.redhat.com:3128
+    token_url: https://sso.stage.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
 prod:
   base_url: https://console.redhat.com
+  cert_base_url: https://cert.console.redhat.com
+  http:
+    token_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
