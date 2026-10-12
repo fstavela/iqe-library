@@ -78,6 +78,9 @@ def test_basic_rejects_non_string_credentials(field, value):
         ("refresh_token", "refresh_token"),
         ("client_credentials", "client_secret"),
         ("client_credentials", "client_id"),
+        ("password", "username"),
+        ("password", "password"),
+        ("password", "client_id"),
         ("refresh_token", "grant_type"),
     ],
 )
@@ -143,6 +146,20 @@ def token_boundary(monkeypatch):
                 "client_id": ["service"],
             },
         ),
+        (
+            {
+                "grant_type": "password",
+                "username": "test-user",
+                "password": "secret",
+                "client_id": "cloud-services",
+            },
+            {
+                "grant_type": ["password"],
+                "username": ["test-user"],
+                "password": ["secret"],
+                "client_id": ["cloud-services"],
+            },
+        ),
     ],
 )
 def test_jwt_grants_are_lazy_and_use_isolated_transport(block, expected, token_boundary):
@@ -204,6 +221,22 @@ def test_jwt_endpoint_client_and_scope_precedence(scope, per_user, token_boundar
     data = parse_qs(request.body)
     assert data["client_id"] == ["user-client" if per_user else "shared-client"]
     assert data.get("scope") == (["read write"] if scope else None)
+
+
+def test_password_grant_requires_explicit_client_id():
+    config = {
+        "default_user": "selected",
+        "http": {"token_url": "https://sso.invalid/token"},
+        "users": {
+            "selected": {
+                "auth": {
+                    "jwt": {"grant_type": "password", "username": "user", "password": "password"}
+                }
+            }
+        },
+    }
+    with pytest.raises(ValueError, match="client_id"):
+        create_session_from_config(config, auth_type="jwt")
 
 
 @pytest.mark.parametrize("mode", ["split", "combined", "pem"])

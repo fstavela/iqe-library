@@ -73,6 +73,15 @@ def offline_auth(**kwargs):
     )
 
 
+def password_auth(**kwargs):
+    return auth_module.OIDCAuth.from_password(
+        "test-user",
+        "password-sentinel",
+        TokenEndpoint(token_url="https://sso.invalid/token", client_id="cloud-services"),
+        **kwargs,
+    )
+
+
 @pytest.mark.parametrize(
     "grant,scope",
     [
@@ -80,6 +89,8 @@ def offline_auth(**kwargs):
         ("refresh_token", "openid"),
         ("client_credentials", ""),
         ("client_credentials", "openid offline_access"),
+        ("password", None),
+        ("password", "openid"),
     ],
 )
 def test_grants_are_lazy_cached_and_not_logged(exchange, caplog, grant, scope):
@@ -87,6 +98,13 @@ def test_grants_are_lazy_cached_and_not_logged(exchange, caplog, grant, scope):
     if grant == "refresh_token":
         auth = offline_auth(scope=scope)
         expected = {"client_id": ["rhsm-api"], "refresh_token": ["offline-sentinel"]}
+    elif grant == "password":
+        auth = password_auth(scope=scope)
+        expected = {
+            "client_id": ["cloud-services"],
+            "username": ["test-user"],
+            "password": ["password-sentinel"],
+        }
     else:
         auth = auth_module.OIDCAuth.from_client_credentials(
             "client-secret-sentinel",
@@ -113,6 +131,63 @@ def test_grants_are_lazy_cached_and_not_logged(exchange, caplog, grant, scope):
     assert session.hooks == {"response": []}
     assert len(exchange.calls) == 1
     assert "sentinel" not in caplog.text + repr(auth)
+
+
+def test_password_grant_switches_to_rotating_refresh_tokens(exchange, clock):
+    exchange.replies.extend(
+        [
+            response(token_response(refresh_token="first-refresh")),
+            response(token_response(access_token="renewed", refresh_token="rotated-refresh")),
+            response(token_response(access_token="renewed-again")),
+        ]
+    )
+    auth = password_auth()
+    assert auth.get_token() == "access-sentinel"
+    clock.now = 90
+    assert auth.get_token() == "renewed"
+    clock.now = 180
+    assert auth.get_token() == "renewed-again"
+    assert form(exchange.calls[1][1]) == {
+        "grant_type": ["refresh_token"],
+        "client_id": ["cloud-services"],
+        "refresh_token": ["first-refresh"],
+    }
+    assert form(exchange.calls[2][1])["refresh_token"] == ["rotated-refresh"]
+    assert all("password" not in form(call[1]) for call in exchange.calls[1:])
+
+
+def test_password_grant_renews_with_password_if_no_refresh_token(exchange, clock):
+    auth = password_auth()
+    assert auth.get_token() == "access-sentinel"
+    clock.now = 90
+    assert auth.get_token() == "access-sentinel"
+    assert all(form(call[1])["password"] == ["password-sentinel"] for call in exchange.calls)
+
+
+def test_password_grant_invalid_response_does_not_switch_grants(exchange):
+    exchange.replies.extend(
+        [
+            response(token_response(expires_in=0, refresh_token="uncommitted-refresh")),
+            response(token_response()),
+        ]
+    )
+    auth = password_auth()
+    with pytest.raises(TokenAuthenticationError):
+        auth.get_token()
+    assert auth.get_token() == "access-sentinel"
+    assert all(form(call[1])["grant_type"] == ["password"] for call in exchange.calls)
+
+
+@pytest.mark.parametrize(
+    "field,value", [("username", None), ("username", " "), ("password", ""), ("password", 1)]
+)
+def test_password_grant_invalid_credentials_fail_locally(exchange, field, value):
+    kwargs = {"username": "test-user", "password": "password-sentinel", field: value}
+    with pytest.raises(ValueError, match="nonempty string"):
+        auth_module.OIDCAuth.from_password(
+            **kwargs, endpoint=TokenEndpoint(token_url="https://sso.invalid/token")
+        )
+    assert not exchange.calls
 
 
 @pytest.mark.parametrize(

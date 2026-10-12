@@ -13,7 +13,7 @@ repos:
         types_or: [python, pyi]
       - id: mypy
         name: mypy (strict)
-        entry: uv run --locked --extra config mypy
+        entry: uv run --locked --all-extras mypy
         language: system
         pass_filenames: false
         files: '^(src/|pyproject\.toml$|uv\.lock$|\.pre-commit-config\.yaml$)'

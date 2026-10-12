@@ -23,10 +23,6 @@ config = [
     "dynaconf==3.2.13",
     "PyYAML>=6",
     "Jinja2>=3",
-    "hvac>=2",
-    "requests>=2.32.2",
-    "urllib3>=1.26.5",
-    "truststore>=0.10",
 ]
 vault = [
     "hvac>=2",
@@ -35,6 +31,8 @@ vault = [
     "truststore>=0.10",
 ]
 kerberos = ["requests-gssapi"]
+ephemeral = ["ocviapy"]
+users = ["python-keycloak>=5.8.1,<6"]
 
 [project.urls]
 Repository = "https://github.com/fstavela/iqe-library"
@@ -69,5 +67,5 @@ python_version = "3.12"
 files = ["src"]
 
 [[tool.mypy.overrides]]
-module = ["dynaconf.*", "hvac.*", "requests_gssapi"]
+module = ["dynaconf.*", "hvac.*", "requests_gssapi", "ocviapy"]
 ignore_missing_imports = true

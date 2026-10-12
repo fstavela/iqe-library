@@ -1,6 +1,8 @@
 # iqe-library
 
-Shared Python utilities for testing Red Hat Insights services, usable independently
+Shared Python utilities for testing Red Hat Insights services: configuration,
+authentication, HTTP sessions, Vault secrets, Insights archives, and ephemeral
+environment discovery and user provisioning. Utilities can be used independently
 without the IQE test framework.
 
 ## Development
@@ -17,7 +19,7 @@ uv build
 
 The checkout is installed in editable mode. Pre-commit runs Ruff, strict mypy,
 and basic file checks; tests are offline and need no service credentials.
-Use `uv run --all-extras pytest tests/test_http.py -q` to run one module.
+Use `uv run --all-extras pytest tests/test_archive.py -q` to run one module.
 
 To use the checkout in another uv project:
 
@@ -26,7 +28,7 @@ uv add --dev --editable '/path/to/iqe-library[http,config]'
 ```
 
 The base package has no runtime dependencies. Select only the extras you need:
-`http`, `config`, `vault`, and `kerberos`.
+`http`, `config`, `vault`, `kerberos`, `ephemeral`, and `users`.
 
 ## Configuration
 
@@ -90,7 +92,8 @@ with create_session(auth=auth) as session:
 ```
 
 OAuth tokens are acquired lazily and renewed automatically. Service accounts can
-use `OIDCAuth.from_client_credentials(secret, endpoint)` with an explicit client ID.
+use `OIDCAuth.from_client_credentials(secret, endpoint)` with an explicit client ID;
+ephemeral Keycloak realms can use `OIDCAuth.from_password(username, password, endpoint)`.
 `IdentityAuth(identity, entitlements)` provides `x-rh-identity` authentication.
 For client TLS, pass `CertificateAuth.from_files(cert_path, key_path)` or
 `CertificateAuth.from_pem(cert_pem, key_pem)` as `auth`; session close removes only
@@ -144,5 +147,59 @@ finally:
 
 Pass `source_archive=Path("custom.tar.gz")` for a filesystem template.
 The source is never modified; archive uploading is left to the consumer.
+
+## Ephemeral environments
+
+Requires `ephemeral`, plus an installed and logged-in `oc` CLI. Discovery reads
+the external gateway and SSO URL from the selected environment and caches them.
+
+```python
+from iqe_library.ephemeral import EphemeralEnvParser
+
+environment = EphemeralEnvParser(namespace="ephemeral-example")
+print(environment.env_hostname)
+print(environment.sso_url)
+```
+
+Without an explicit namespace, `NAMESPACE` is used, then the current `oc project`.
+With `config,ephemeral`, `load_config(environment="ephemeral")` supplies lazy gateway,
+SSO, and Keycloak admin settings. Loading config alone does not contact OpenShift.
+
+## User provisioning
+
+Requires `users`. Create or reuse Keycloak users without changing RBAC roles/groups.
+Admin credentials and user credentials are separate.
+
+```python
+import os
+
+from iqe_library.users import create_user_provider
+
+with create_user_provider(
+    server_url="https://sso.example.com/auth/",
+    username="admin",
+    password=os.environ["KEYCLOAK_ADMIN_PASSWORD"],
+) as provider:
+    keycloak_id = provider.ensure_user(
+        username="demo",
+        password=os.environ["DEMO_PASSWORD"],
+        attributes={
+            "account_number": "012345",
+            "org_id": "12345",
+            "user_id": "123451",
+            "email": "demo@example.com",
+            "first_name": "Demo",
+            "last_name": "User",
+        },
+        entitlements={"insights": {"is_entitled": True}},
+    )
+```
+
+Reuse preserves the Keycloak UUID; `recreate=True` deletes and recreates the user.
+The required Insights `user_id` is distinct from that UUID.
+`provision_users_from_config(settings)` provisions configured users using their
+`auth.basic`, `attributes`, and `entitlements` blocks and `keycloak_admin` settings.
+For ephemeral use, install `config,ephemeral,users` and call provisioning explicitly
+from test setup, not during imports or collection.
 
 Licensed under [GPLv3](LICENSE).

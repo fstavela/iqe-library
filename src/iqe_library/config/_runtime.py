@@ -1,9 +1,10 @@
 """Per-settings lazy evaluation, without changing Dynaconf's global converters."""
 
+from __future__ import annotations
+
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 from dynaconf.base import Settings
 from dynaconf.utils.boxing import DynaBox
@@ -11,7 +12,8 @@ from dynaconf.utils.parse_conf import Lazy, MetaValue, parse_conf_data
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
-from iqe_library.vault import VaultOptions, VaultSecretFetcher
+if TYPE_CHECKING:
+    from iqe_library.vault import VaultSecretFetcher
 
 
 def _template_environment() -> SandboxedEnvironment:
@@ -26,16 +28,18 @@ def _template_environment() -> SandboxedEnvironment:
 class ConfigRuntime:
     """State owned by one loaded Settings object, outside its configuration keys."""
 
-    template_context: Mapping[str, object]
+    template_context: dict[str, object]
     loading: bool = True
     _fetcher: VaultSecretFetcher | None = None
     jinja: SandboxedEnvironment = field(default_factory=_template_environment)
 
-    def __post_init__(self) -> None:
-        self.template_context = dict(self.template_context)
-
     def get_fetcher(self, settings: Settings) -> VaultSecretFetcher:
         if self._fetcher is None:
+            try:
+                from iqe_library.vault import VaultOptions, VaultSecretFetcher
+            except ImportError:
+                raise ImportError("Vault references require iqe-library[vault]") from None
+
             self._fetcher = VaultSecretFetcher(VaultOptions.from_mapping(settings.vault))
         return self._fetcher
 

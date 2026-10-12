@@ -76,6 +76,7 @@ def test_http_auth_are_independent_and_lazy(isolated, first):
         auths = [None, NoAuth(), HTTPBasicAuth('u', 'p'), IdentityAuth({{}}),
                  OIDCAuth.from_refresh_token('offline', endpoint),
                  OIDCAuth.from_client_credentials('secret', endpoint),
+                 OIDCAuth.from_password('user', 'password', endpoint),
                  CertificateAuth.from_pem('cert', 'key')]
         with certificate_files('cert', 'key') as paths:
             auths.append(CertificateAuth.from_files(*paths))
@@ -97,10 +98,86 @@ def test_http_auth_are_independent_and_lazy(isolated, first):
     [
         ("iqe_library", ("dynaconf", "yaml", "jinja2", "hvac", "requests", "truststore"), ""),
         ("iqe_library.vault", ("dynaconf", "requests_gssapi"), ""),
+        (
+            "iqe_library.ephemeral",
+            ("dynaconf", "hvac", "ocviapy"),
+            "assert module.EphemeralEnvParser('selected').namespace == 'selected'",
+        ),
+        (
+            "iqe_library.users",
+            ("dynaconf", "hvac", "ocviapy"),
+            """
+with module.create_user_provider(server_url='https://sso.invalid/auth/', username='admin', password='private'):
+    pass
+with module.create_user_provider_from_config({'keycloak_admin': {'server_url': 'https://sso.invalid/auth/', 'username': 'admin', 'password': 'private'}}):
+    pass
+""",
+        ),
     ],
 )
 def test_standalone_modules(isolated, module, blocked, construction):
     isolated(
         f"import importlib\nmodule = importlib.import_module({module!r})\n" + construction,
         blocked=(*blocked, "pytest", "iqe_library.config"),
+    )
+
+
+def test_config_loading_and_overrides_need_no_backends(isolated, config_file):
+    path = config_file("default:\n  secret: !from_vault {path: never-read, key: password}\n")
+    isolated(
+        """
+        import os
+        from iqe_library.config import load_config
+        settings = load_config(sys.argv[1], environment='ephemeral')
+        assert settings.http.default_auth_type == 'basic'
+        os.environ['DYNACONF_BASE_URL'] = 'https://override.invalid'
+        os.environ['DYNACONF_SECRET'] = 'literal-override'
+        overridden = load_config(sys.argv[1], environment='ephemeral')
+        assert overridden.base_url == 'https://override.invalid'
+        assert overridden.secret == 'literal-override'
+        """,
+        args=(str(path),),
+        blocked=(
+            "ocviapy",
+            "keycloak",
+            "hvac",
+            "requests",
+            "truststore",
+            "urllib3",
+            "iqe_library.vault",
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "backend,dependency,key",
+    [("vault", "hvac", "secret"), ("ephemeral", "ocviapy", "base_url")],
+)
+def test_missing_backends_fail_on_access(isolated, config_file, backend, dependency, key):
+    path = config_file("default:\n  secret: !from_vault {path: never-read, key: password}\n")
+    isolated(
+        f"""
+        import os
+        os.environ['NAMESPACE'] = 'selected'
+        from iqe_library.config import load_config
+        settings = load_config(sys.argv[1], environment='ephemeral')
+        assert settings.http.default_auth_type == 'basic'
+        try:
+            settings.get({key!r})
+        except ImportError as error:
+            assert 'iqe-library[{backend}]' in str(error)
+        else:
+            raise AssertionError('Access must require the backend extra')
+        if {backend!r} == 'ephemeral':
+            from iqe_library.ephemeral import EphemeralEnvParser
+            parser = EphemeralEnvParser('selected')
+            try:
+                parser.env_hostname
+            except ImportError as error:
+                assert 'iqe-library[ephemeral]' in str(error)
+            else:
+                raise AssertionError('Discovery must require the extra')
+        """,
+        missing=(dependency,),
+        args=(str(path),),
     )

@@ -55,8 +55,8 @@ def _proxies(http: ConfigLookup) -> dict[str, str] | None:
 
 def _jwt(block: ConfigLookup, http: ConfigLookup, transport: dict[str, Any]) -> OIDCAuth:
     grant = block.get("grant_type", "refresh_token")
-    if grant not in ("refresh_token", "client_credentials"):
-        raise ValueError("grant_type must be refresh_token or client_credentials")
+    if grant not in ("refresh_token", "client_credentials", "password"):
+        raise ValueError("grant_type must be refresh_token, client_credentials or password")
     token_url = block.get("token_url")
     if token_url is None:
         token_url = http.get("token_url")
@@ -64,7 +64,7 @@ def _jwt(block: ConfigLookup, http: ConfigLookup, transport: dict[str, Any]) -> 
     client_id = block.get("client_id")
     if client_id is None:
         client_id = http.get("client_id")
-    if client_id is not None or grant == "client_credentials":
+    if client_id is not None or grant in ("client_credentials", "password"):
         endpoint_options["client_id"] = _string(client_id, "client_id")
     endpoint = TokenEndpoint(**endpoint_options)
     scope = block.get("scope")
@@ -73,6 +73,13 @@ def _jwt(block: ConfigLookup, http: ConfigLookup, transport: dict[str, Any]) -> 
     if grant == "refresh_token":
         return OIDCAuth.from_refresh_token(
             _string(block.get("refresh_token"), "refresh_token"), endpoint, scope=scope
+        )
+    if grant == "password":
+        return OIDCAuth.from_password(
+            _string(block.get("username"), "username"),
+            _string(block.get("password"), "password"),
+            endpoint,
+            scope=scope,
         )
     return OIDCAuth.from_client_credentials(
         _string(block.get("client_secret"), "client_secret"), endpoint, scope=scope

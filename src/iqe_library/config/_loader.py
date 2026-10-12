@@ -13,6 +13,7 @@ from dynaconf.loaders import env_loader
 from dynaconf.loaders.base import BaseLoader
 from dynaconf.utils.files import get_local_filename
 
+from iqe_library.config._ephemeral import ConfigEnvParser
 from iqe_library.config._runtime import ConfigRuntime, normalize_lazy_values
 from iqe_library.config.yaml import yaml_reader
 
@@ -82,7 +83,7 @@ def load_config(
         LOAD_DOTENV_FOR_DYNACONF=False,
     )
     settings = Settings(dynaconf_skip_loaders=True)
-    runtime = ConfigRuntime(template_context or {})
+    runtime = ConfigRuntime(dict(template_context or {}))
     object.__setattr__(settings, "_config_runtime", runtime)
     object.__setattr__(settings, "_template_context", runtime.template_context)
 
@@ -115,5 +116,6 @@ def load_config(
         loader._load_all_envs({name: data}, silent=True)
         settings._loaded_files.append(name)
     env_loader.load(settings, silent=False)
+    runtime.template_context.setdefault("env_parser", ConfigEnvParser(settings))
     runtime.loading = False
     return settings
