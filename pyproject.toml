@@ -13,6 +13,24 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+config = [
+    "dynaconf==3.2.13",
+    "PyYAML>=6",
+    "Jinja2>=3",
+    "hvac>=2",
+    "requests>=2.32.2",
+    "urllib3>=1.26.5",
+    "truststore>=0.10",
+]
+vault = [
+    "hvac>=2",
+    "requests>=2.32.2",
+    "urllib3>=1.26.5",
+    "truststore>=0.10",
+]
+kerberos = ["requests-gssapi"]
+
 [project.urls]
 Repository = "https://github.com/fstavela/iqe-library"
 
@@ -27,7 +45,10 @@ required-version = ">=0.12.1"
 dev = [
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
+    "pytest>=8",
     "ruff>=0.16.9",
+    "types-PyYAML",
+    "types-requests",
 ]
 
 [tool.ruff]
@@ -41,3 +62,7 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B", "SIM", "RUF"]
 strict = true
 python_version = "3.12"
 files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["dynaconf.*", "hvac.*", "requests_gssapi"]
+ignore_missing_imports = true

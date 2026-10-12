@@ -1,0 +1,18 @@
+default:
+  proxy: null
+  vault:
+    url: https://vault.devshift.net
+    mount_point: insights
+    verify: true
+    token: null
+    role_id: null
+    secret_id: null
+    oidc_token: null
+    oidc_role: Default
+    oidc_redirect_uri: http://localhost:8250/oidc/callback
+    timeout: 60
+stage:
+  base_url: https://console.stage.redhat.com
+  proxy: http://squid.corp.redhat.com:3128
+prod:
+  base_url: https://console.redhat.com
