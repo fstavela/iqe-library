@@ -125,4 +125,24 @@ Authentication supports explicit tokens, AppRole (`role_id`/`secret_id`), and
 browserless OIDC. OIDC also requires `kerberos` and an existing Kerberos ticket.
 Create a new fetcher when fresh secrets are needed.
 
+## Insights archives
+
+No extras required. Generate a modern Insights archive with unique host IDs and
+hostname, using the bundled RHEL 9.4 template or your own archive.
+
+```python
+from shutil import rmtree
+
+from iqe_library.archive import HostArchiveData, prepare_archive
+
+archive = prepare_archive(HostArchiveData.random())
+try:
+    print(archive)  # Pass this Path to your uploader.
+finally:
+    rmtree(archive.parent)  # The caller owns the output directory.
+```
+
+Pass `source_archive=Path("custom.tar.gz")` for a filesystem template.
+The source is never modified; archive uploading is left to the consumer.
+
 Licensed under [GPLv3](LICENSE).
